@@ -3081,7 +3081,7 @@
             owner = stack_pointer[-1];
             PyObject *owner_o = PyStackRef_AsPyObjectBorrow(owner);
             assert(Py_TYPE(owner_o)->tp_dictoffset < 0);
-            assert(Py_TYPE(owner_o)->tp_flags & Py_TPFLAGS_INLINE_VALUES);
+            assert(_PyType_HasFeature(Py_TYPE(owner_o), Py_TPFLAGS_INLINE_VALUES));
             if (!FT_ATOMIC_LOAD_UINT8(_PyObject_InlineValues(owner_o)->valid)) {
                 UOP_STAT_INC(uopcode, miss);
                 JUMP_TO_JUMP_TARGET();
@@ -3171,7 +3171,7 @@
             owner = stack_pointer[-1];
             uint16_t hint = (uint16_t)CURRENT_OPERAND0();
             PyObject *owner_o = PyStackRef_AsPyObjectBorrow(owner);
-            assert(Py_TYPE(owner_o)->tp_flags & Py_TPFLAGS_MANAGED_DICT);
+            assert(_PyType_HasFeature(Py_TYPE(owner_o), Py_TPFLAGS_MANAGED_DICT));
             PyDictObject *dict = _PyObject_GetManagedDict(owner_o);
             if (dict == NULL) {
                 UOP_STAT_INC(uopcode, miss);
@@ -3333,7 +3333,7 @@
             owner = stack_pointer[-1];
             PyObject *owner_o = PyStackRef_AsPyObjectBorrow(owner);
             assert(Py_TYPE(owner_o)->tp_dictoffset < 0);
-            assert(Py_TYPE(owner_o)->tp_flags & Py_TPFLAGS_INLINE_VALUES);
+            assert(_PyType_HasFeature(Py_TYPE(owner_o), Py_TPFLAGS_INLINE_VALUES));
             if (_PyObject_GetManagedDict(owner_o) ||
                 !FT_ATOMIC_LOAD_UINT8(_PyObject_InlineValues(owner_o)->valid)) {
                 UNLOCK_OBJECT(owner_o);
@@ -3380,7 +3380,7 @@
             value = stack_pointer[-2];
             uint16_t hint = (uint16_t)CURRENT_OPERAND0();
             PyObject *owner_o = PyStackRef_AsPyObjectBorrow(owner);
-            assert(Py_TYPE(owner_o)->tp_flags & Py_TPFLAGS_MANAGED_DICT);
+            assert(_PyType_HasFeature(Py_TYPE(owner_o), Py_TPFLAGS_MANAGED_DICT));
             PyDictObject *dict = _PyObject_GetManagedDict(owner_o);
             if (dict == NULL) {
                 UOP_STAT_INC(uopcode, miss);
@@ -3975,7 +3975,7 @@
             _PyStackRef subject;
             _PyStackRef res;
             subject = stack_pointer[-1];
-            int match = PyStackRef_TYPE(subject)->tp_flags & Py_TPFLAGS_MAPPING;
+            int match = _PyType_HasFeature(PyStackRef_TYPE(subject), Py_TPFLAGS_MAPPING);
             res = match ? PyStackRef_True : PyStackRef_False;
             stack_pointer[0] = res;
             stack_pointer += 1;
@@ -3987,7 +3987,7 @@
             _PyStackRef subject;
             _PyStackRef res;
             subject = stack_pointer[-1];
-            int match = PyStackRef_TYPE(subject)->tp_flags & Py_TPFLAGS_SEQUENCE;
+            int match = _PyType_HasFeature(PyStackRef_TYPE(subject), Py_TPFLAGS_SEQUENCE);
             res = match ? PyStackRef_True : PyStackRef_False;
             stack_pointer[0] = res;
             stack_pointer += 1;
@@ -4406,7 +4406,7 @@
             _PyStackRef owner;
             owner = stack_pointer[-1];
             PyObject *owner_o = PyStackRef_AsPyObjectBorrow(owner);
-            assert(Py_TYPE(owner_o)->tp_flags & Py_TPFLAGS_INLINE_VALUES);
+            assert(_PyType_HasFeature(Py_TYPE(owner_o), Py_TPFLAGS_INLINE_VALUES));
             PyDictValues *ivs = _PyObject_InlineValues(owner_o);
             if (!FT_ATOMIC_LOAD_UINT8(ivs->valid)) {
                 UOP_STAT_INC(uopcode, miss);
@@ -5165,7 +5165,7 @@
                 JUMP_TO_JUMP_TARGET();
             }
             assert(tp->tp_new == PyBaseObject_Type.tp_new);
-            assert(tp->tp_flags & Py_TPFLAGS_HEAPTYPE);
+            assert(_PyType_HasFeature(tp, Py_TPFLAGS_HEAPTYPE));
             assert(tp->tp_alloc == PyType_GenericAlloc);
             PyHeapTypeObject *cls = (PyHeapTypeObject *)callable_o;
             PyFunctionObject *init_func = (PyFunctionObject *)FT_ATOMIC_LOAD_PTR_ACQUIRE(cls->_spec_cache.init);
