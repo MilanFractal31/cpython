@@ -1452,6 +1452,91 @@ fold_tuple_of_constants(basicblock *bb, int i, PyObject *consts, PyObject *const
     return SUCCESS;
 }
 
+/* Replace:
+    BUILD_LIST 0
+    LOAD_CONST c1
+    LIST_APPEND 1
+    LOAD_CONST c2
+    LIST_APPEND 1
+    ...
+    LOAD_CONST cN
+    LIST_APPEND 1
+    CALL_INTRINSIC_1 INTRINSIC_LIST_TO_TUPLE
+   with:
+    LOAD_CONST (c1, c2, ... cN)
+*/
+static int
+fold_constant_intrinsic_list_to_tuple(basicblock *bb, int i,
+                                      PyObject *consts, PyObject *const_cache)
+{
+    assert(PyDict_CheckExact(const_cache));
+    assert(PyList_CheckExact(consts));
+    assert(i >= 0);
+    assert(i < bb->b_iused);
+    cfg_instr *intrinsic = &bb->b_instr[i];
+    assert(intrinsic->i_opcode == CALL_INTRINSIC_1);
+    assert(intrinsic->i_oparg == INTRINSIC_LIST_TO_TUPLE);
+
+    int consts_found = 0;
+    bool start_found = false;
+    bool expect_append = true;
+
+    for (int pos = i - 1; pos >= 0; pos--) {
+        cfg_instr *instr = &bb->b_instr[pos];
+        int opcode = instr->i_opcode;
+        int oparg = instr->i_oparg;
+
+        if (opcode == NOP) {
+            continue;
+        }
+
+        if (opcode == BUILD_LIST && oparg == 0) {
+            start_found = expect_append;
+            break;
+        }
+
+        if (expect_append) {
+            if (opcode != LIST_APPEND || oparg != 1) {
+                break;
+            }
+        }
+        else {
+            if (!loads_const(opcode)) {
+                break;
+            }
+            consts_found++;
+        }
+
+        expect_append = !expect_append;
+    }
+
+    if (!start_found) {
+        return SUCCESS;
+    }
+
+    PyObject *newconst = PyTuple_New((Py_ssize_t)consts_found);
+    if (newconst == NULL) {
+        return ERROR;
+    }
+
+    int nops = consts_found * 2 + 1;
+    for (int pos = i - 1; pos >= 0 && consts_found > 0; pos--) {
+        cfg_instr *instr = &bb->b_instr[pos];
+        if (loads_const(instr->i_opcode)) {
+            PyObject *constant = get_const_value(instr->i_opcode, instr->i_oparg, consts);
+            if (constant == NULL) {
+                Py_DECREF(newconst);
+                return ERROR;
+            }
+            PyTuple_SET_ITEM(newconst, --consts_found, constant);
+        }
+    }
+
+    assert(consts_found == 0);
+    nop_out(bb, i-1, nops);
+    return instr_make_load_const(intrinsic, newconst, consts, const_cache);
+}
+
 #define MIN_CONST_SEQUENCE_SIZE 3
 /*
 Optimize lists and sets for:
@@ -2294,9 +2379,13 @@ optimize_basic_block(PyObject *const_cache, basicblock *bb, PyObject *consts)
                 RETURN_IF_ERROR(fold_const_unaryop(bb, i, consts, const_cache));
                 break;
             case CALL_INTRINSIC_1:
-                // for _ in (*foo, *bar) -> for _ in [*foo, *bar]
-                if (oparg == INTRINSIC_LIST_TO_TUPLE && nextop == GET_ITER) {
-                    INSTR_SET_OP0(inst, NOP);
+                if (oparg == INTRINSIC_LIST_TO_TUPLE) {
+                    if (nextop == GET_ITER) {
+                        INSTR_SET_OP0(inst, NOP);
+                    }
+                    else {
+                        RETURN_IF_ERROR(fold_constant_intrinsic_list_to_tuple(bb, i, consts, const_cache));
+                    }
                 }
                 else if (oparg == INTRINSIC_UNARY_POSITIVE) {
                     RETURN_IF_ERROR(fold_const_unaryop(bb, i, consts, const_cache));
