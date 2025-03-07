@@ -75,6 +75,20 @@ class ResourceTracker(object):
         raise ReentrantCallError(
             "Reentrant call into the multiprocessing resource tracker")
 
+    def __del__(self):
+        # making sure child processess are cleaned before ResourceTracker
+        # gets destructed.
+        # see https://github.com/python/cpython/issues/88887
+        try:
+            self._stop()
+        except AttributeError:
+            # AttributeError is likely caused by module teardown
+            # > __del__() can be executed during interpreter shutdown. As a
+            # > consequence, the global variables it needs to access (including
+            # > other modules) may already have been deleted or set to None.
+            # see https://docs.python.org/3/reference/datamodel.html#object.__del__
+            pass
+
     def _stop(self):
         with self._lock:
             # This should not happen (_stop() isn't called by a finalizer)
@@ -83,6 +97,8 @@ class ResourceTracker(object):
                 return self._reentrant_call_error()
             if self._fd is None:
                 # not running
+                return
+            if self._pid is None:
                 return
 
             # closing the "alive" file descriptor stops main()
